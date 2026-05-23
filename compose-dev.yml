@@ -1,0 +1,76 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: ice-geodata-db-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ice_geodata}
+      POSTGRES_USER: ${POSTGRES_USER:-ice_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ice_password}
+    ports:
+      - "54328:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ice_user} -d ${POSTGRES_DB:-ice_geodata}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ice-geodata-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  web:
+    build: ./web
+    container_name: ice-geodata-web-dev
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=DEV
+      - GDAL_HTTP_MAX_RETRY=5
+      - GDAL_HTTP_RETRY_DELAY=2
+      - GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR
+      - CPL_VSIL_CURL_ALLOWED_EXTENSIONS=.tif,.TIF,.tiff,.TIFF
+    volumes:
+      - ./web:/app
+      - mediafiles_dev:/app/mediafiles
+      - staticfiles_dev:/app/staticfiles
+    env_file:
+      - .env
+    ports:
+      - "${EXPOSED_APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery:
+    build: ./web
+    container_name: ice-geodata-celery-dev
+    restart: unless-stopped
+    command: celery -A config worker -l info --concurrency=1
+    volumes:
+      - ./web:/app
+      - mediafiles_dev:/app/mediafiles
+      - staticfiles_dev:/app/staticfiles
+    environment:
+      - GDAL_HTTP_MAX_RETRY=5
+      - GDAL_HTTP_RETRY_DELAY=2
+      - GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR
+      - CPL_VSIL_CURL_ALLOWED_EXTENSIONS=.tif,.TIF,.tiff,.TIFF
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data_dev:
+  mediafiles_dev:
+  staticfiles_dev:

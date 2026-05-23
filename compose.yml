@@ -1,0 +1,83 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: ice-geodata-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ice_geodata}
+      POSTGRES_USER: ${POSTGRES_USER:-ice_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ice_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ice_user} -d ${POSTGRES_DB:-ice_geodata}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ice-geodata-redis
+    restart: always
+
+  web:
+    build: ./web
+    container_name: ice-geodata-web
+    restart: always
+    command: /app/docker-entrypoint.sh prod
+    environment:
+      - GDAL_HTTP_MAX_RETRY=5
+      - GDAL_HTTP_RETRY_DELAY=2
+      - GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR
+      - CPL_VSIL_CURL_ALLOWED_EXTENSIONS=.tif,.TIF,.tiff,.TIFF
+    volumes:
+      - mediafiles:/app/mediafiles
+      - staticfiles:/app/staticfiles
+    env_file:
+      - .env
+    expose:
+      - 8000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery:
+    build: ./web
+    container_name: ice-geodata-celery
+    restart: always
+    command: celery -A config worker -l info --concurrency=1
+    volumes:
+      - mediafiles:/app/mediafiles
+      - staticfiles:/app/staticfiles
+    environment:
+      - GDAL_HTTP_MAX_RETRY=5
+      - GDAL_HTTP_RETRY_DELAY=2
+      - GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR
+      - CPL_VSIL_CURL_ALLOWED_EXTENSIONS=.tif,.TIF,.tiff,.TIFF
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ice-geodata-nginx
+    restart: always
+    ports:
+      - "${NGINX_EXPOSED_PORT:-8080}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - mediafiles:/app/mediafiles:ro
+      - staticfiles:/app/staticfiles:ro
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:
+  mediafiles:
+  staticfiles:
