@@ -7,13 +7,13 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
         <link rel="stylesheet"
-              href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+              href="{% static 'geodata/css/leaflet.css' %}">
         <link rel="stylesheet"
-              href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+              href="{% static 'geodata/css/leaflet.draw.css' %}">
 
         <link rel="stylesheet" href="{% static 'geodata/css/roi_manager.css' %}">
     </head>
-    <body>
+    <body x-data="roiManager()" x-init="init()">
         <div class="page">
             <header class="topbar">
                 <div>
@@ -21,15 +21,14 @@
                     <p>ROI creation, editing and mosaic job management</p>
                 </div>
                 <div class="topbar-actions">
-                    <button id="refreshJobsButton">Refresh jobs</button>
-                    <button id="fitRoisButton">Fit ROIs</button>
+                    <button type="button" @click="loadJobs()">Refresh jobs</button>
+                    <button type="button" @click="fitRois()">Fit ROIs</button>
                 </div>
             </header>
 
             <main class="layout">
                 <section class="map-panel">
                     <div id="map"></div>
-                    <div class="status-line" id="statusLine">Draw polygon or rectangle to create ROI.</div>
                 </section>
 
                 <aside class="side-panel">
@@ -37,63 +36,132 @@
                         <h2>Selected ROI</h2>
 
                         <label for="roiNameInput">ROI name</label>
-                        <input id="roiNameInput" type="text" placeholder="New ROI">
+                        <input id="roiNameInput"
+                               x-model="roiName"
+                               type="text"
+                               placeholder="New ROI">
 
                         <div class="button-row">
-                            <button id="saveRoiButton">Save ROI</button>
-                            <button id="deleteRoiButton" class="danger">Delete ROI</button>
-                            <button id="clearSelectionButton">Clear</button>
+                            <button type="button" @click="saveSelectedRoi()">Save ROI</button>
+                            <button type="button" @click="deleteSelectedRoi()" class="danger">Delete ROI</button>
+                            <button type="button" @click="clearSelection()">Clear</button>
                         </div>
 
-                        <div class="small-info" id="selectedRoiInfo">No ROI selected.</div>
+                        <div class="small-info" x-text="selectedRoiText"></div>
                     </section>
 
                     <section class="card">
                         <h2>Create mosaic job</h2>
 
                         <label for="targetDateInput">Target date</label>
-                        <input id="targetDateInput" type="date" value="2024-08-01">
+                        <input id="targetDateInput"
+                               x-model="jobForm.target_date"
+                               type="date">
 
                         <label for="timeWindowInput">Time window, days</label>
-                        <input id="timeWindowInput" type="number" min="1" max="30" value="7">
+                        <input id="timeWindowInput"
+                               x-model.number="jobForm.time_window_days"
+                               type="number"
+                               min="1"
+                               max="30">
 
                         <label>Sensors</label>
                         <div class="checkbox-row">
                             <label>
-                                <input id="sentinel2Input" type="checkbox" checked>
+                                <input id="sentinel2Input"
+                                       x-model="jobForm.use_sentinel2"
+                                       type="checkbox">
                                 Sentinel-2 L2A
                             </label>
                             <label>
-                                <input id="sentinel1Input" type="checkbox">
+                                <input id="sentinel1Input"
+                                       x-model="jobForm.use_sentinel1"
+                                       type="checkbox">
                                 Sentinel-1 RTC
                             </label>
                         </div>
 
                         <label for="targetCrsInput">Target CRS</label>
-                        <input id="targetCrsInput" type="text" value="EPSG:32643">
+                        <input id="targetCrsInput"
+                               x-model="jobForm.target_crs"
+                               type="text">
 
                         <label for="resolutionInput">Resolution, meters</label>
-                        <input id="resolutionInput" type="number" value="10" min="10" step="10">
+                        <input id="resolutionInput"
+                               x-model.number="jobForm.resolution"
+                               type="number"
+                               min="10"
+                               step="10">
 
                         <label for="cloudCoverInput">Max cloud cover, %</label>
-                        <input id="cloudCoverInput" type="number" value="40" min="0" max="100">
+                        <input id="cloudCoverInput"
+                               x-model.number="jobForm.max_cloud_cover"
+                               type="number"
+                               min="0"
+                               max="100">
 
                         <div class="button-row">
-                            <button id="createJobButton">Create job</button>
-                            <button id="createAndRunJobButton">Create and run</button>
+                            <button type="button" @click="createJob(false)">Create job</button>
+                            <button type="button" @click="createJob(true)">Create and run</button>
                         </div>
                     </section>
 
                     <section class="card">
                         <h2>Jobs</h2>
-                        <div id="jobsList" class="jobs-list"></div>
+                        <div class="jobs-list">
+                            <template x-if="jobs.length === 0">
+                                <div class="small-info">No jobs yet.</div>
+                            </template>
+
+                            <template x-for="job in jobs" :key="job.id">
+                                <div class="job-card">
+                                    <div class="job-title">
+                                        Job #<span x-text="job.id"></span>
+                                        <span :class="jobStatusClass(job.status)"
+                                              x-text="'[' + job.status + ']'"></span>
+                                    </div>
+
+                                    <div class="job-meta">
+                                        ROI: <span x-text="job.roi_name || job.roi_id"></span><br>
+                                        Date: <span x-text="job.target_date"></span>,
+                                        window: ±<span x-text="job.time_window_days"></span> days<br>
+                                        Sensors: <span x-text="formatSensors(job.selected_sensors)"></span><br>
+                                        CRS: <span x-text="job.target_crs"></span>,
+                                        resolution: <span x-text="job.resolution"></span> m
+                                    </div>
+
+                                    <template x-if="job.error_message">
+                                        <div class="job-meta status-failed">
+                                            Error: <span x-text="job.error_message"></span>
+                                        </div>
+                                    </template>
+
+                                    <div class="job-actions">
+                                        <button type="button" @click="runJob(job.id)">Run / rerun</button>
+
+                                        <template x-if="job.preview_image">
+                                            <button type="button"
+                                                    :class="{ secondary: isPreviewVisible(job.id) }"
+                                                    @click="togglePreview(job)">
+                                                <span x-text="isPreviewVisible(job.id) ? 'Hide preview' : 'Show preview'"></span>
+                                            </button>
+                                        </template>
+
+                                        <template x-if="job.output_cog">
+                                            <a :href="job.output_cog" target="_blank">COG</a>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </section>
                 </aside>
             </main>
         </div>
 
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+        <script src="{% static 'geodata/js/leaflet.js' %}"></script>
+        <script src="{% static 'geodata/js/leaflet.draw.js' %}"></script>
+        <script defer src="{% static 'geodata/js/alpine.js' %}"></script>
         <script src="{% static 'geodata/js/roi_manager.js' %}"></script>
     </body>
 </html>

@@ -3,6 +3,7 @@ from pathlib import Path
 import rioxarray
 from geodata.services.sensor_registry import get_sensor_spec
 from geodata.services.bands import available_bands
+from geodata.services.dates import coerce_date
 from geodata.services.features import create_feature_stack
 from geodata.services.export import save_feature_stack_as_cog
 from geodata.services.masks import apply_masks
@@ -23,6 +24,7 @@ class MosaicBuildResult:
 def build_mosaic_for_job(job) -> MosaicBuildResult:
     mosaics = {}
     scenes_count = {}
+    target_date = coerce_date(job.target_date)
 
     for sensor_name in job.selected_sensors:
         sensor = get_sensor_spec(sensor_name)
@@ -58,7 +60,7 @@ def build_mosaic_for_job(job) -> MosaicBuildResult:
     feature_stack = create_feature_stack(mosaics)
 
     cog_path = save_feature_stack_as_cog(feature_stack, f"mosaic_job_{job.pk}.tif")
-    map_html_path = create_mosaic_map(
+    map_html_path, bounds_4326 = create_mosaic_map(
         cog_path,
         job.roi.polygon,
         f"mosaic_job_{job.pk}.html",
@@ -67,11 +69,11 @@ def build_mosaic_for_job(job) -> MosaicBuildResult:
     return MosaicBuildResult(
         cog_path=cog_path,
         map_html_path=map_html_path,
-        bounds_4326=job.roi.polygon.extent,
+        bounds_4326=bounds_4326,
         metadata={
             "job_id": job.pk,
             "roi_id": job.roi_id,
-            "target_date": job.target_date.isoformat(),
+            "target_date": target_date.isoformat(),
             "time_window_days": job.time_window_days,
             "selected_sensors": job.selected_sensors,
             "target_crs": job.target_crs,

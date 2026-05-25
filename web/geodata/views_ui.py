@@ -1,11 +1,13 @@
 import json
 
+from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_http_methods
 
 from geodata.models import MosaicJob, RegionOfInterest
+from geodata.services.dates import coerce_date
 from geodata.tasks import run_mosaic_job
 
 
@@ -26,12 +28,40 @@ def roi_to_feature(roi: RegionOfInterest) -> dict:
     }
 
 
+def bounds_to_leaflet(bounds) -> list[list[float]]:
+    west, south, east, north = bounds
+    return [[south, west], [north, east]]
+
+
+def get_preview_image_url(job: MosaicJob):
+    if not job.preview_html:
+        return None
+
+    image_names = [
+        job.preview_html.name.rsplit(".", 1)[0] + ".png",
+        f"previews/mosaic_job_{job.pk}.png",
+    ]
+
+    for image_name in image_names:
+        image_path = settings.MEDIA_ROOT / image_name
+        if image_path.exists():
+            return settings.MEDIA_URL + image_name.replace("\\", "/")
+
+    return None
+
+
 def job_to_dict(job: MosaicJob) -> dict:
+    preview_bounds = None
+    if job.output_bounds:
+        preview_bounds = bounds_to_leaflet(job.output_bounds.extent)
+    elif job.roi:
+        preview_bounds = bounds_to_leaflet(job.roi.polygon.extent)
+
     return {
         "id": job.pk,
         "roi_id": job.roi_id,
         "roi_name": job.roi.name if job.roi else None,
-        "target_date": job.target_date.isoformat(),
+        "target_date": coerce_date(job.target_date).isoformat(),
         "time_window_days": job.time_window_days,
         "selected_sensors": job.selected_sensors,
         "target_crs": job.target_crs,
@@ -41,6 +71,8 @@ def job_to_dict(job: MosaicJob) -> dict:
         "error_message": job.error_message,
         "output_cog": job.output_cog.url if job.output_cog else None,
         "preview_html": job.preview_html.url if job.preview_html else None,
+        "preview_image": get_preview_image_url(job),
+        "preview_bounds": preview_bounds,
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,

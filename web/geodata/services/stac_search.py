@@ -6,14 +6,16 @@ from django.contrib.gis.geos import GEOSGeometry, Polygon
 from pystac_client import Client
 
 from geodata.models import SatelliteScene
+from geodata.services.dates import coerce_date
 from geodata.services.sensor_registry import get_sensor_spec
 
 STAC_API_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
 
 
 def get_datetime_range(job) -> str:
-    start_date = job.target_date - timedelta(days=job.time_window_days)
-    end_date = job.target_date + timedelta(days=job.time_window_days)
+    target_date = coerce_date(job.target_date)
+    start_date = target_date - timedelta(days=job.time_window_days)
+    end_date = target_date + timedelta(days=job.time_window_days)
     return f"{start_date.isoformat()}/{end_date.isoformat()}"
 
 
@@ -74,8 +76,9 @@ def save_items_to_database(items, sensor_name: str):
 
 
 def find_candidate_scenes(job):
-    start_datetime = datetime.combine(job.target_date - timedelta(days=job.time_window_days), time.min, tzinfo=timezone.utc)
-    end_datetime = datetime.combine(job.target_date + timedelta(days=job.time_window_days), time.max, tzinfo=timezone.utc)
+    target_date = coerce_date(job.target_date)
+    start_datetime = datetime.combine(target_date - timedelta(days=job.time_window_days), time.min, tzinfo=timezone.utc)
+    end_datetime = datetime.combine(target_date + timedelta(days=job.time_window_days), time.max, tzinfo=timezone.utc)
 
     queryset = SatelliteScene.objects.filter(
         sensor__in=job.selected_sensors,

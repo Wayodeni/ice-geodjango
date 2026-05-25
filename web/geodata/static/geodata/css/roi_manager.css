@@ -58,18 +58,6 @@ body {
   height: calc(100vh - 72px);
 }
 
-.status-line {
-  position: absolute;
-  left: 16px;
-  bottom: 16px;
-  z-index: 500;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid #d8dee6;
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 13px;
-}
-
 .side-panel {
   height: calc(100vh - 72px);
   overflow: auto;
@@ -127,6 +115,15 @@ button.danger {
 
 button.danger:hover {
   background: #922b21;
+}
+
+button.secondary {
+  background: #34495e;
+  border-color: #34495e;
+}
+
+button.secondary:hover {
+  background: #22313f;
 }
 
 .button-row {

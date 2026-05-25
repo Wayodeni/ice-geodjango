@@ -10,6 +10,12 @@ from PIL import Image
 from pyproj import Transformer
 
 
+def leaflet_bounds_to_extent(bounds: list[list[float]]) -> tuple[float, float, float, float]:
+    south, west = bounds[0]
+    north, east = bounds[1]
+    return west, south, east, north
+
+
 def roi_to_feature_collection(roi):
     if isinstance(roi, GEOSGeometry):
         geometry = json.loads(roi.geojson)
@@ -84,7 +90,7 @@ def create_rgb_preview_png(cog_path: Path, output_png_path: Path) -> tuple[list[
     return bounds, output_png_path
 
 
-def create_mosaic_map(cog_path: Path, roi, output_name: str) -> Path:
+def create_mosaic_map(cog_path: Path, roi, output_name: str) -> tuple[Path, tuple[float, float, float, float]]:
     output_dir = settings.MEDIA_ROOT / "previews"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -126,4 +132,4 @@ def create_mosaic_map(cog_path: Path, roi, output_name: str) -> Path:
 
     m.save(str(output_html_path))
 
-    return output_html_path
+    return output_html_path, leaflet_bounds_to_extent(image_bounds)

@@ -1,391 +1,445 @@
-const map = L.map("map").setView([43.15, 76.95], 8);
+function roiManager() {
+  return {
+    map: null,
+    drawnItems: null,
+    previewLayers: {},
+    selectedLayer: null,
+    visiblePreviewJobIds: [],
+    refreshTimer: null,
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19,
-  attribution: "OpenStreetMap contributors",
-}).addTo(map);
+    statusText: "Draw polygon or rectangle to create ROI.",
+    selectedRoiText: "No ROI selected.",
+    roiName: "",
+    jobs: [],
 
-const drawnItems = new L.FeatureGroup();
-map.addLayer(drawnItems);
-
-const drawControl = new L.Control.Draw({
-  draw: {
-    marker: false,
-    circle: false,
-    circlemarker: false,
-    polyline: false,
-    polygon: {
-      allowIntersection: false,
-      showArea: true,
+    jobForm: {
+      target_date: "2024-08-01",
+      time_window_days: 7,
+      use_sentinel2: true,
+      use_sentinel1: false,
+      target_crs: "EPSG:32643",
+      resolution: 10,
+      max_cloud_cover: 40,
     },
-    rectangle: {
-      showArea: true,
+
+    init() {
+      this.initMap();
+      this.loadRois();
+      this.loadJobs();
+
+      this.refreshTimer = setInterval(() => {
+        this.loadJobs();
+      }, 5000);
     },
-  },
-  edit: {
-    featureGroup: drawnItems,
-    edit: true,
-    remove: false,
-  },
-});
 
-map.addControl(drawControl);
+    initMap() {
+      this.map = L.map("map").setView([43.15, 76.95], 8);
 
-let selectedLayer = null;
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "OpenStreetMap contributors",
+      }).addTo(this.map);
 
-const statusLine = document.getElementById("statusLine");
-const roiNameInput = document.getElementById("roiNameInput");
-const selectedRoiInfo = document.getElementById("selectedRoiInfo");
-const jobsList = document.getElementById("jobsList");
+      this.drawnItems = new L.FeatureGroup();
+      this.map.addLayer(this.drawnItems);
 
-function setStatus(text) {
-  statusLine.textContent = text;
-}
+      const drawControl = new L.Control.Draw({
+        draw: {
+          marker: false,
+          circle: false,
+          circlemarker: false,
+          polyline: false,
+          polygon: {
+            allowIntersection: false,
+            showArea: true,
+          },
+          rectangle: {
+            showArea: true,
+          },
+        },
+        edit: {
+          featureGroup: this.drawnItems,
+          edit: true,
+          remove: false,
+        },
+      });
 
-function getCookie(name) {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) {
-    return parts.pop().split(";").shift();
-  }
-  return "";
-}
+      this.map.addControl(drawControl);
 
-function apiFetch(url, options = {}) {
-  const headers = options.headers || {};
-  headers["Content-Type"] = "application/json";
-  headers["X-CSRFToken"] = getCookie("csrftoken");
+      this.map.on(L.Draw.Event.CREATED, (event) => {
+        const layer = event.layer;
+        this.drawnItems.addLayer(layer);
+        this.selectLayer(layer);
+        this.setStatus("New ROI drawn. Enter name and save.");
+      });
 
-  return fetch(url, {
-    ...options,
-    headers,
-  });
-}
-
-function getLayerGeometry(layer) {
-  const feature = layer.toGeoJSON();
-  return feature.geometry;
-}
-
-function selectLayer(layer) {
-  selectedLayer = layer;
-
-  drawnItems.eachLayer((item) => {
-    item.setStyle({
-      color: "#2f6fed",
-      weight: 2,
-      fillOpacity: 0.15,
-    });
-  });
-
-  selectedLayer.setStyle({
-    color: "#e74c3c",
-    weight: 3,
-    fillOpacity: 0.18,
-  });
-
-  roiNameInput.value = layer.roiName || "ROI";
-
-  if (layer.roiId) {
-    selectedRoiInfo.textContent = `Selected ROI ID: ${layer.roiId}`;
-  } else {
-    selectedRoiInfo.textContent = "Selected unsaved ROI.";
-  }
-
-  setStatus("ROI selected.");
-}
-
-function addRoiLayer(feature) {
-  const layer = L.geoJSON(feature, {
-    style: {
-      color: "#2f6fed",
-      weight: 2,
-      fillOpacity: 0.15,
+      this.map.on(L.Draw.Event.EDITED, () => {
+        if (this.selectedLayer) {
+          this.setStatus("ROI geometry changed. Save ROI to persist changes.");
+        }
+      });
     },
-  });
 
-  layer.eachLayer((subLayer) => {
-    subLayer.roiId = feature.properties.id;
-    subLayer.roiName = feature.properties.name;
+    setStatus(text) {
+      this.statusText = text;
+    },
 
-    subLayer.on("click", () => {
-      selectLayer(subLayer);
-    });
+    getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
 
-    subLayer.bindPopup(
-      `ROI #${feature.properties.id}<br>${feature.properties.name}`,
-    );
-    drawnItems.addLayer(subLayer);
-  });
-}
+      if (parts.length === 2) {
+        return parts.pop().split(";").shift();
+      }
 
-async function loadRois() {
-  drawnItems.clearLayers();
-  selectedLayer = null;
+      return "";
+    },
 
-  const response = await fetch("/geo/api/rois/");
-  const data = await response.json();
+    async apiFetch(url, options = {}) {
+      const headers = options.headers || {};
+      headers["Content-Type"] = "application/json";
+      headers["X-CSRFToken"] = this.getCookie("csrftoken");
 
-  data.features.forEach((feature) => {
-    addRoiLayer(feature);
-  });
+      return fetch(url, {
+        ...options,
+        headers,
+      });
+    },
 
-  if (drawnItems.getLayers().length > 0) {
-    map.fitBounds(drawnItems.getBounds(), {
-      padding: [20, 20],
-    });
-  }
+    getLayerGeometry(layer) {
+      return layer.toGeoJSON().geometry;
+    },
 
-  setStatus(`Loaded ROIs: ${data.features.length}`);
-}
+    resetLayerStyles() {
+      this.drawnItems.eachLayer((layer) => {
+        if (layer.setStyle) {
+          layer.setStyle({
+            color: "#2f6fed",
+            weight: 2,
+            fillOpacity: 0.15,
+          });
+        }
+      });
+    },
 
-async function saveSelectedRoi() {
-  if (!selectedLayer) {
-    setStatus("No ROI selected.");
-    return;
-  }
+    clearPreviews() {
+      Object.values(this.previewLayers).forEach((layer) => {
+        this.map.removeLayer(layer);
+      });
 
-  const geometry = getLayerGeometry(selectedLayer);
-  const name = roiNameInput.value || "ROI";
+      this.previewLayers = {};
+      this.visiblePreviewJobIds = [];
+    },
 
-  if (selectedLayer.roiId) {
-    const response = await apiFetch(`/geo/api/rois/${selectedLayer.roiId}/`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        name,
-        geometry,
-      }),
-    });
+    selectLayer(layer) {
+      this.selectedLayer = layer;
+      this.resetLayerStyles();
 
-    if (!response.ok) {
-      setStatus("Failed to update ROI.");
-      return;
-    }
+      if (this.selectedLayer.setStyle) {
+        this.selectedLayer.setStyle({
+          color: "#e74c3c",
+          weight: 3,
+          fillOpacity: 0.18,
+        });
+      }
 
-    setStatus("ROI updated.");
-  } else {
-    const response = await apiFetch("/geo/api/rois/", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        geometry,
-      }),
-    });
+      this.roiName = layer.roiName || "ROI";
+      this.selectedRoiText = layer.roiId
+        ? `Selected ROI ID: ${layer.roiId}`
+        : "Selected unsaved ROI.";
 
-    if (!response.ok) {
-      setStatus("Failed to create ROI.");
-      return;
-    }
+      this.setStatus("ROI selected.");
+    },
 
-    const feature = await response.json();
-    selectedLayer.roiId = feature.properties.id;
-    selectedLayer.roiName = feature.properties.name;
-    setStatus("ROI created.");
-  }
+    addRoiLayer(feature) {
+      const layerGroup = L.geoJSON(feature, {
+        style: {
+          color: "#2f6fed",
+          weight: 2,
+          fillOpacity: 0.15,
+        },
+      });
 
-  await loadRois();
-}
+      layerGroup.eachLayer((layer) => {
+        layer.roiId = feature.properties.id;
+        layer.roiName = feature.properties.name;
 
-async function deleteSelectedRoi() {
-  if (!selectedLayer) {
-    setStatus("No ROI selected.");
-    return;
-  }
+        layer.on("click", () => {
+          this.selectLayer(layer);
+        });
 
-  if (!selectedLayer.roiId) {
-    drawnItems.removeLayer(selectedLayer);
-    selectedLayer = null;
-    setStatus("Unsaved ROI removed.");
-    return;
-  }
+        layer.bindPopup(
+          `ROI #${feature.properties.id}<br>${feature.properties.name}`,
+        );
+        this.drawnItems.addLayer(layer);
+      });
+    },
 
-  const response = await apiFetch(`/geo/api/rois/${selectedLayer.roiId}/`, {
-    method: "DELETE",
-  });
+    async loadRois() {
+      this.drawnItems.clearLayers();
+      this.selectedLayer = null;
+      this.roiName = "";
+      this.selectedRoiText = "No ROI selected.";
 
-  if (!response.ok) {
-    setStatus("Failed to delete ROI.");
-    return;
-  }
+      const response = await fetch("/geo/api/rois/");
 
-  selectedLayer = null;
-  await loadRois();
-  setStatus("ROI deleted.");
-}
+      if (!response.ok) {
+        this.setStatus("Failed to load ROIs.");
+        return;
+      }
 
-function clearSelection() {
-  selectedLayer = null;
-  roiNameInput.value = "";
-  selectedRoiInfo.textContent = "No ROI selected.";
+      const data = await response.json();
+      const features = data.features || [];
 
-  drawnItems.eachLayer((item) => {
-    item.setStyle({
-      color: "#2f6fed",
-      weight: 2,
-      fillOpacity: 0.15,
-    });
-  });
+      features.forEach((feature) => {
+        this.addRoiLayer(feature);
+      });
 
-  setStatus("Selection cleared.");
-}
+      if (this.drawnItems.getLayers().length > 0) {
+        this.map.fitBounds(this.drawnItems.getBounds(), {
+          padding: [20, 20],
+        });
+      }
 
-function selectedSensors() {
-  const sensors = [];
+      this.setStatus(`Loaded ROIs: ${features.length}`);
+    },
 
-  if (document.getElementById("sentinel2Input").checked) {
-    sensors.push("sentinel-2-l2a");
-  }
+    async saveSelectedRoi() {
+      if (!this.selectedLayer) {
+        this.setStatus("No ROI selected.");
+        return;
+      }
 
-  if (document.getElementById("sentinel1Input").checked) {
-    sensors.push("sentinel-1-rtc");
-  }
+      const geometry = this.getLayerGeometry(this.selectedLayer);
+      const name = this.roiName || "ROI";
 
-  return sensors;
-}
+      if (this.selectedLayer.roiId) {
+        const response = await this.apiFetch(
+          `/geo/api/rois/${this.selectedLayer.roiId}/`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({
+              name,
+              geometry,
+            }),
+          },
+        );
 
-async function createJob(runImmediately = false) {
-  if (!selectedLayer || !selectedLayer.roiId) {
-    setStatus("Select and save ROI before creating job.");
-    return;
-  }
+        if (!response.ok) {
+          this.setStatus("Failed to update ROI.");
+          return;
+        }
 
-  const payload = {
-    roi_id: selectedLayer.roiId,
-    target_date: document.getElementById("targetDateInput").value,
-    time_window_days: Number(document.getElementById("timeWindowInput").value),
-    selected_sensors: selectedSensors(),
-    target_crs: document.getElementById("targetCrsInput").value,
-    resolution: Number(document.getElementById("resolutionInput").value),
-    max_cloud_cover: Number(document.getElementById("cloudCoverInput").value),
+        this.setStatus("ROI updated.");
+      } else {
+        const response = await this.apiFetch("/geo/api/rois/", {
+          method: "POST",
+          body: JSON.stringify({
+            name,
+            geometry,
+          }),
+        });
+
+        if (!response.ok) {
+          this.setStatus("Failed to create ROI.");
+          return;
+        }
+
+        const feature = await response.json();
+        this.selectedLayer.roiId = feature.properties.id;
+        this.selectedLayer.roiName = feature.properties.name;
+        this.setStatus("ROI created.");
+      }
+
+      await this.loadRois();
+    },
+
+    async deleteSelectedRoi() {
+      if (!this.selectedLayer) {
+        this.setStatus("No ROI selected.");
+        return;
+      }
+
+      if (!this.selectedLayer.roiId) {
+        this.drawnItems.removeLayer(this.selectedLayer);
+        this.clearSelection();
+        this.setStatus("Unsaved ROI removed.");
+        return;
+      }
+
+      const response = await this.apiFetch(
+        `/geo/api/rois/${this.selectedLayer.roiId}/`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (!response.ok) {
+        this.setStatus("Failed to delete ROI.");
+        return;
+      }
+
+      await this.loadRois();
+      this.setStatus("ROI deleted.");
+    },
+
+    clearSelection() {
+      this.selectedLayer = null;
+      this.roiName = "";
+      this.selectedRoiText = "No ROI selected.";
+      this.resetLayerStyles();
+      this.setStatus("Selection cleared.");
+    },
+
+    isPreviewVisible(jobId) {
+      return this.visiblePreviewJobIds.includes(jobId);
+    },
+
+    removePreview(jobId) {
+      const layer = this.previewLayers[jobId];
+
+      if (layer) {
+        this.map.removeLayer(layer);
+      }
+
+      delete this.previewLayers[jobId];
+      this.visiblePreviewJobIds = this.visiblePreviewJobIds.filter((id) => id !== jobId);
+    },
+
+    showPreview(job) {
+      if (!job.preview_image || !job.preview_bounds) {
+        this.setStatus(`Job #${job.id} has no map preview yet.`);
+        return;
+      }
+
+      if (this.isPreviewVisible(job.id)) {
+        return;
+      }
+
+      const previewLayer = L.imageOverlay(job.preview_image, job.preview_bounds, {
+        opacity: 0.75,
+        interactive: true,
+        alt: `Mosaic preview for job ${job.id}`,
+      }).addTo(this.map);
+
+      this.previewLayers[job.id] = previewLayer;
+      this.visiblePreviewJobIds = [...this.visiblePreviewJobIds, job.id];
+      previewLayer.bringToFront();
+      this.drawnItems.bringToFront();
+      this.map.fitBounds(job.preview_bounds, {
+        padding: [20, 20],
+      });
+      this.setStatus(`Showing preview for job #${job.id}.`);
+    },
+
+    togglePreview(job) {
+      if (this.isPreviewVisible(job.id)) {
+        this.removePreview(job.id);
+        this.setStatus(`Hidden preview for job #${job.id}.`);
+        return;
+      }
+
+      this.showPreview(job);
+    },
+
+    selectedSensors() {
+      const sensors = [];
+
+      if (this.jobForm.use_sentinel2) {
+        sensors.push("sentinel-2-l2a");
+      }
+
+      if (this.jobForm.use_sentinel1) {
+        sensors.push("sentinel-1-rtc");
+      }
+
+      return sensors;
+    },
+
+    async createJob(runImmediately = false) {
+      if (!this.selectedLayer || !this.selectedLayer.roiId) {
+        this.setStatus("Select and save ROI before creating job.");
+        return;
+      }
+
+      const sensors = this.selectedSensors();
+
+      if (sensors.length === 0) {
+        this.setStatus("Select at least one sensor.");
+        return;
+      }
+
+      const payload = {
+        roi_id: this.selectedLayer.roiId,
+        target_date: this.jobForm.target_date,
+        time_window_days: Number(this.jobForm.time_window_days),
+        selected_sensors: sensors,
+        target_crs: this.jobForm.target_crs,
+        resolution: Number(this.jobForm.resolution),
+        max_cloud_cover: Number(this.jobForm.max_cloud_cover),
+      };
+
+      const response = await this.apiFetch("/geo/api/jobs/", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        this.setStatus("Failed to create job.");
+        return;
+      }
+
+      const job = await response.json();
+      this.setStatus(`Job #${job.id} created.`);
+
+      if (runImmediately) {
+        await this.runJob(job.id);
+      }
+
+      await this.loadJobs();
+    },
+
+    async runJob(jobId) {
+      const response = await this.apiFetch(`/geo/api/jobs/${jobId}/run/`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok && response.status !== 409) {
+        this.setStatus(`Failed to run job #${jobId}.`);
+        return;
+      }
+
+      this.setStatus(`Job #${jobId} started.`);
+      await this.loadJobs();
+    },
+
+    async loadJobs() {
+      const response = await fetch("/geo/api/jobs/");
+
+      if (!response.ok) {
+        this.setStatus("Failed to load jobs.");
+        return;
+      }
+
+      const data = await response.json();
+      this.jobs = data.results || [];
+    },
+
+    fitRois() {
+      if (this.drawnItems.getLayers().length > 0) {
+        this.map.fitBounds(this.drawnItems.getBounds(), {
+          padding: [20, 20],
+        });
+      }
+    },
+
+    jobStatusClass(status) {
+      return `status-${status}`;
+    },
+
+    formatSensors(sensors) {
+      return Array.isArray(sensors) ? sensors.join(", ") : "";
+    },
   };
-
-  const response = await apiFetch("/geo/api/jobs/", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    setStatus("Failed to create job.");
-    return;
-  }
-
-  const job = await response.json();
-  setStatus(`Job #${job.id} created.`);
-
-  if (runImmediately) {
-    await runJob(job.id);
-  }
-
-  await loadJobs();
 }
-
-async function runJob(jobId) {
-  const response = await apiFetch(`/geo/api/jobs/${jobId}/run/`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
-
-  if (!response.ok && response.status !== 409) {
-    setStatus(`Failed to run job #${jobId}.`);
-    return;
-  }
-
-  setStatus(`Job #${jobId} started.`);
-  await loadJobs();
-}
-
-function jobStatusClass(status) {
-  return `status-${status}`;
-}
-
-function renderJob(job) {
-  const previewLink = job.preview_html
-    ? `<a href="${job.preview_html}" target="_blank">Preview</a>`
-    : "";
-
-  const cogLink = job.output_cog
-    ? `<a href="${job.output_cog}" target="_blank">COG</a>`
-    : "";
-
-  const error = job.error_message
-    ? `<div class="job-meta status-failed">Error: ${job.error_message}</div>`
-    : "";
-
-  return `
-        <div class="job-card">
-            <div class="job-title">
-                Job #${job.id}
-                <span class="${jobStatusClass(job.status)}">[${job.status}]</span>
-            </div>
-            <div class="job-meta">
-                ROI: ${job.roi_name || job.roi_id}<br>
-                Date: ${job.target_date}, window: ±${job.time_window_days} days<br>
-                Sensors: ${job.selected_sensors.join(", ")}<br>
-                CRS: ${job.target_crs}, resolution: ${job.resolution} m
-            </div>
-            ${error}
-            <div class="job-actions">
-                <button onclick="runJob(${job.id})">Run / rerun</button>
-                ${previewLink}
-                ${cogLink}
-            </div>
-        </div>
-    `;
-}
-
-async function loadJobs() {
-  const response = await fetch("/geo/api/jobs/");
-  const data = await response.json();
-
-  jobsList.innerHTML = data.results.map(renderJob).join("");
-
-  if (data.results.length === 0) {
-    jobsList.innerHTML = "<div class='small-info'>No jobs yet.</div>";
-  }
-}
-
-map.on(L.Draw.Event.CREATED, (event) => {
-  const layer = event.layer;
-  drawnItems.addLayer(layer);
-  selectLayer(layer);
-  setStatus("New ROI drawn. Enter name and save.");
-});
-
-map.on(L.Draw.Event.EDITED, () => {
-  if (selectedLayer) {
-    setStatus("ROI geometry changed. Save ROI to persist changes.");
-  }
-});
-
-document
-  .getElementById("saveRoiButton")
-  .addEventListener("click", saveSelectedRoi);
-document
-  .getElementById("deleteRoiButton")
-  .addEventListener("click", deleteSelectedRoi);
-document
-  .getElementById("clearSelectionButton")
-  .addEventListener("click", clearSelection);
-
-document
-  .getElementById("createJobButton")
-  .addEventListener("click", () => createJob(false));
-document
-  .getElementById("createAndRunJobButton")
-  .addEventListener("click", () => createJob(true));
-document
-  .getElementById("refreshJobsButton")
-  .addEventListener("click", loadJobs);
-
-document.getElementById("fitRoisButton").addEventListener("click", () => {
-  if (drawnItems.getLayers().length > 0) {
-    map.fitBounds(drawnItems.getBounds(), {
-      padding: [20, 20],
-    });
-  }
-});
-
-loadRois();
-loadJobs();
-
-setInterval(loadJobs, 5000);
