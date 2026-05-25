@@ -8,6 +8,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/", include("geodata.urls")),
     path("", RedirectView.as_view(pattern_name="mosaic-job-list", permanent=False)),
+    path("geo/", include("geodata.urls_ui")),
 ]
 
 if settings.DEBUG:
