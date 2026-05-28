@@ -34,13 +34,7 @@ def bounds_to_leaflet(bounds) -> list[list[float]]:
 
 
 def get_preview_image_url(job: MosaicJob):
-    if not job.preview_html:
-        return None
-
-    image_names = [
-        job.preview_html.name.rsplit(".", 1)[0] + ".png",
-        f"previews/mosaic_job_{job.pk}.png",
-    ]
+    image_names = [f"previews/mosaic_job_{job.pk}.png"]
 
     for image_name in image_names:
         image_path = settings.MEDIA_ROOT / image_name
@@ -70,7 +64,6 @@ def job_to_dict(job: MosaicJob) -> dict:
         "status": job.status,
         "error_message": job.error_message,
         "output_cog": job.output_cog.url if job.output_cog else None,
-        "preview_html": job.preview_html.url if job.preview_html else None,
         "preview_image": get_preview_image_url(job),
         "preview_bounds": preview_bounds,
         "created_at": job.created_at.isoformat() if job.created_at else None,

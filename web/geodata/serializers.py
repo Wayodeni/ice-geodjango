@@ -33,7 +33,6 @@ class SatelliteSceneSerializer(GeoFeatureModelSerializer):
 
 class MosaicJobSerializer(serializers.ModelSerializer):
     output_cog_url = serializers.SerializerMethodField()
-    preview_html_url = serializers.SerializerMethodField()
 
     class Meta:
         model = MosaicJob
@@ -49,9 +48,7 @@ class MosaicJobSerializer(serializers.ModelSerializer):
             "status",
             "error_message",
             "output_cog",
-            "preview_html",
             "output_cog_url",
-            "preview_html_url",
             "output_metadata",
             "created_at",
             "started_at",
@@ -62,7 +59,6 @@ class MosaicJobSerializer(serializers.ModelSerializer):
             "status",
             "error_message",
             "output_cog",
-            "preview_html",
             "output_metadata",
             "created_at",
             "started_at",
@@ -75,12 +71,4 @@ class MosaicJobSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(obj.output_cog.url)
         if obj.output_cog:
             return obj.output_cog.url
-        return None
-
-    def get_preview_html_url(self, obj):
-        request = self.context.get("request")
-        if obj.preview_html and request:
-            return request.build_absolute_uri(obj.preview_html.url)
-        if obj.preview_html:
-            return obj.preview_html.url
         return None

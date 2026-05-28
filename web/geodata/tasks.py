@@ -17,9 +17,6 @@ def run_mosaic_job(self, job_id):
         with open(result.cog_path, "rb") as file:
             job.output_cog.save(result.cog_path.name, File(file), save=False)
 
-        with open(result.map_html_path, "rb") as file:
-            job.preview_html.save(result.map_html_path.name, File(file), save=False)
-
         if result.bounds_4326:
             job.output_bounds = Polygon.from_bbox(result.bounds_4326)
 

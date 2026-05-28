@@ -10,13 +10,13 @@ from geodata.services.masks import apply_masks
 from geodata.services.mosaic import build_optical_mosaic, build_sar_mosaic
 from geodata.services.raster_loader import load_stack
 from geodata.services.stac_search import search_stac_items, save_items_to_database
-from geodata.services.visualization import create_mosaic_map
+from geodata.services.visualization import create_mosaic_preview
 
 
 @dataclass
 class MosaicBuildResult:
     cog_path: Path
-    map_html_path: Path
+    preview_png_path: Path
     bounds_4326: tuple[float, float, float, float]
     metadata: dict
 
@@ -60,15 +60,14 @@ def build_mosaic_for_job(job) -> MosaicBuildResult:
     feature_stack = create_feature_stack(mosaics)
 
     cog_path = save_feature_stack_as_cog(feature_stack, f"mosaic_job_{job.pk}.tif")
-    map_html_path, bounds_4326 = create_mosaic_map(
+    preview_png_path, bounds_4326 = create_mosaic_preview(
         cog_path,
-        job.roi.polygon,
-        f"mosaic_job_{job.pk}.html",
+        f"mosaic_job_{job.pk}.png",
     )
 
     return MosaicBuildResult(
         cog_path=cog_path,
-        map_html_path=map_html_path,
+        preview_png_path=preview_png_path,
         bounds_4326=bounds_4326,
         metadata={
             "job_id": job.pk,
@@ -79,6 +78,7 @@ def build_mosaic_for_job(job) -> MosaicBuildResult:
             "target_crs": job.target_crs,
             "resolution": job.resolution,
             "max_cloud_cover": job.max_cloud_cover,
+            "preview_png": str(preview_png_path.name),
             "scenes_count": scenes_count,
         },
     )

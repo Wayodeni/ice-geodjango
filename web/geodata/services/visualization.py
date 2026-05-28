@@ -1,11 +1,8 @@
-import json
 from pathlib import Path
 
-import folium
 import numpy as np
 import rasterio
 from django.conf import settings
-from django.contrib.gis.geos import GEOSGeometry
 from PIL import Image
 from pyproj import Transformer
 
@@ -14,26 +11,6 @@ def leaflet_bounds_to_extent(bounds: list[list[float]]) -> tuple[float, float, f
     south, west = bounds[0]
     north, east = bounds[1]
     return west, south, east, north
-
-
-def roi_to_feature_collection(roi):
-    if isinstance(roi, GEOSGeometry):
-        geometry = json.loads(roi.geojson)
-    elif isinstance(roi, str):
-        geometry = json.loads(roi)
-    else:
-        geometry = roi
-
-    return {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "properties": {"name": "ROI"},
-                "geometry": geometry,
-            }
-        ],
-    }
 
 
 def normalize_band(array: np.ndarray) -> np.ndarray:
@@ -90,46 +67,12 @@ def create_rgb_preview_png(cog_path: Path, output_png_path: Path) -> tuple[list[
     return bounds, output_png_path
 
 
-def create_mosaic_map(cog_path: Path, roi, output_name: str) -> tuple[Path, tuple[float, float, float, float]]:
+def create_mosaic_preview(cog_path: Path, output_name: str) -> tuple[Path, tuple[float, float, float, float]]:
     output_dir = settings.MEDIA_ROOT / "previews"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_html_path = output_dir / output_name
-    output_png_path = output_dir / output_name.replace(".html", ".png")
-
-    center = [roi.centroid.y, roi.centroid.x]
-
-    m = folium.Map(
-        location=center,
-        zoom_start=9,
-        tiles="OpenStreetMap",
-    )
-
-    roi_geojson = roi_to_feature_collection(roi)
-
-    folium.GeoJson(
-        roi_geojson,
-        name="ROI",
-        style_function=lambda feature: {
-            "color": "red",
-            "weight": 2,
-            "fillOpacity": 0.0,
-        },
-    ).add_to(m)
+    output_png_path = output_dir / output_name
 
     image_bounds, image_path = create_rgb_preview_png(cog_path, output_png_path)
 
-    folium.raster_layers.ImageOverlay(
-        image=str(image_path),
-        bounds=image_bounds,
-        name="Mosaic preview",
-        opacity=0.75,
-        interactive=True,
-        cross_origin=False,
-    ).add_to(m)
-
-    folium.LayerControl().add_to(m)
-
-    m.save(str(output_html_path))
-
-    return output_html_path, leaflet_bounds_to_extent(image_bounds)
+    return image_path, leaflet_bounds_to_extent(image_bounds)

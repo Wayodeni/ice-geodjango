@@ -1,4 +1,3 @@
-from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -43,15 +42,3 @@ class MosaicJobViewSet(viewsets.ModelViewSet):
         run_mosaic_job.delay(job.pk)
         serializer = self.get_serializer(job)
         return Response(serializer.data, status=status.HTTP_202_ACCEPTED)
-
-    @action(detail=True, methods=["get"])
-    def map(self, request, pk=None):
-        job = self.get_object()
-
-        if not job.preview_html:
-            return Response({"detail": "Preview map is not available"}, status=status.HTTP_404_NOT_FOUND)
-
-        with job.preview_html.open("r") as file:
-            html = file.read()
-
-        return HttpResponse(html, content_type="text/html")
