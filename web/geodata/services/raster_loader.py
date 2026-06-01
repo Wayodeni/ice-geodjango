@@ -60,6 +60,7 @@ def load_stack(items, job, sensor):
         resolution=job.resolution,
         bounds_latlon=job.roi.polygon.extent,
         chunksize=256,
+        properties=False,
         errors_as_nodata=(
             RasterioIOError(".*"),
             RuntimeError(".*Read failed.*"),

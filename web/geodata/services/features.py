@@ -73,6 +73,10 @@ def add_sentinel2_indices(mosaic: xr.DataArray) -> xr.DataArray:
 
 
 def add_sentinel1_features(mosaic: xr.DataArray) -> xr.DataArray:
+    keep_coords = {"band", "x", "y", "spatial_ref"}
+    bad_coords = [c for c in mosaic.coords if c not in keep_coords]
+    if bad_coords:
+        mosaic = mosaic.drop_vars(bad_coords)
     require_bands(mosaic, ["vv", "vh"])
 
     mosaic = mosaic.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=False)
