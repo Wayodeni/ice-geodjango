@@ -84,14 +84,17 @@
                         <label for="targetCrsInput">Target CRS</label>
                         <input id="targetCrsInput"
                                x-model="jobForm.target_crs"
-                               type="text">
+                               type="text"
+                               pattern="EPSG:[0-9]+"
+                               placeholder="EPSG:32643">
+                        <div class="small-info">Projected EPSG CRS with metre units only.</div>
 
                         <label for="resolutionInput">Resolution, meters</label>
-                        <input id="resolutionInput"
-                               x-model.number="jobForm.resolution"
-                               type="number"
-                               min="10"
-                               step="10">
+                        <select id="resolutionInput" x-model.number="jobForm.resolution">
+                            <template x-for="value in availableResolutions" :key="value">
+                                <option :value="value" x-text="`${value} m`"></option>
+                            </template>
+                        </select>
 
                         <label for="cloudCoverInput">Max cloud cover, %</label>
                         <input id="cloudCoverInput"

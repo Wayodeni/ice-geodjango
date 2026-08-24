@@ -85,6 +85,18 @@ class MosaicJob(models.Model):
     def __str__(self):
         return f"Mosaic job {self.pk}"
 
+    def clean(self):
+        super().clean()
+        from geodata.services.job_validation import normalize_and_validate_job_settings
+
+        normalized = normalize_and_validate_job_settings(
+            self.selected_sensors,
+            self.target_crs,
+            self.resolution,
+        )
+        self.target_crs = normalized["target_crs"]
+        self.resolution = normalized["resolution"]
+
     def mark_running(self):
         self.status = self.STATUS_RUNNING
         self.started_at = timezone.now()

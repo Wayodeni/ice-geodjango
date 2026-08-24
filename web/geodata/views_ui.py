@@ -2,12 +2,14 @@ import json
 
 from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry
+from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_http_methods
 
 from geodata.models import MosaicJob, RegionOfInterest
 from geodata.services.dates import coerce_date
+from geodata.services.job_validation import normalize_and_validate_job_settings
 from geodata.tasks import run_mosaic_job
 
 
@@ -143,13 +145,22 @@ def job_collection_api(request):
 
     roi = get_object_or_404(RegionOfInterest, pk=roi_id)
 
+    try:
+        settings_values = normalize_and_validate_job_settings(
+            payload.get("selected_sensors", ["sentinel-2-l2a"]),
+            payload.get("target_crs", "EPSG:32643"),
+            payload.get("resolution", 10),
+        )
+    except ValidationError as exc:
+        return JsonResponse({"errors": exc.message_dict}, status=400)
+
     job = MosaicJob.objects.create(
         roi=roi,
         target_date=payload["target_date"],
         time_window_days=int(payload.get("time_window_days", 7)),
-        selected_sensors=payload.get("selected_sensors", ["sentinel-2-l2a"]),
-        target_crs=payload.get("target_crs", "EPSG:32643"),
-        resolution=float(payload.get("resolution", 10)),
+        selected_sensors=settings_values["selected_sensors"],
+        target_crs=settings_values["target_crs"],
+        resolution=settings_values["resolution"],
         max_cloud_cover=float(payload.get("max_cloud_cover", 40)),
     )
 

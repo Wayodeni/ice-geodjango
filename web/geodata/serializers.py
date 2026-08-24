@@ -1,7 +1,9 @@
 from rest_framework import serializers
 from rest_framework_gis.serializers import GeoFeatureModelSerializer
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 from geodata.models import MosaicJob, RegionOfInterest, SatelliteScene
+from geodata.services.job_validation import normalize_and_validate_job_settings
 
 
 class RegionOfInterestSerializer(GeoFeatureModelSerializer):
@@ -72,3 +74,25 @@ class MosaicJobSerializer(serializers.ModelSerializer):
         if obj.output_cog:
             return obj.output_cog.url
         return None
+
+    def validate(self, attrs):
+        instance = self.instance
+        default_sensors = ["sentinel-2-l2a"]
+        default_crs = "EPSG:32643"
+        default_resolution = 10
+        try:
+            normalized = normalize_and_validate_job_settings(
+                attrs.get(
+                    "selected_sensors",
+                    getattr(instance, "selected_sensors", default_sensors),
+                ),
+                attrs.get("target_crs", getattr(instance, "target_crs", default_crs)),
+                attrs.get(
+                    "resolution",
+                    getattr(instance, "resolution", default_resolution),
+                ),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict)
+        attrs.update(normalized)
+        return attrs

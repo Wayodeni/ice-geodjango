@@ -356,6 +356,13 @@ function roiManager() {
       return sensors;
     },
 
+    get availableResolutions() {
+      if (this.jobForm.use_sentinel1) {
+        return [10];
+      }
+      return [10, 20, 60];
+    },
+
     async createJob(runImmediately = false) {
       if (!this.selectedLayer || !this.selectedLayer.roiId) {
         this.setStatus("Select and save ROI before creating job.");
@@ -366,6 +373,15 @@ function roiManager() {
 
       if (sensors.length === 0) {
         this.setStatus("Select at least one sensor.");
+        return;
+      }
+
+      if (!this.availableResolutions.includes(Number(this.jobForm.resolution))) {
+        this.jobForm.resolution = this.availableResolutions[0];
+      }
+
+      if (!/^EPSG:\d+$/i.test(this.jobForm.target_crs.trim())) {
+        this.setStatus("Target CRS must be an EPSG code, for example EPSG:32643.");
         return;
       }
 
@@ -385,7 +401,9 @@ function roiManager() {
       });
 
       if (!response.ok) {
-        this.setStatus("Failed to create job.");
+        const error = await response.json();
+        const messages = Object.values(error.errors || {}).flat();
+        this.setStatus(messages.join(" ") || "Failed to create job.");
         return;
       }
 
