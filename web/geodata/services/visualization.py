@@ -80,19 +80,21 @@ def create_rgb_preview_png(cog_path: Path, output_png_path: Path) -> tuple[list[
 def create_sar_preview_png(cog_path: Path, output_png_path: Path) -> tuple[list[list[float]], Path]:
     with rasterio.open(cog_path) as src:
         height, width = preview_shape(src.width, src.height)
-        vv, vh = src.read(
-            [1, 2],
-            out_shape=(2, height, width),
+        vv = src.read(
+            1,
+            out_shape=(height, width),
             resampling=Resampling.bilinear,
         )
-        vv_display = normalize_band(vv)
-        vh_display = normalize_band(vh)
-        difference_display = normalize_band(vv - vh)
-        rgb = np.dstack([vv_display, vh_display, difference_display])
-        alpha = np.all(np.isfinite(np.stack([vv, vh])), axis=0).astype("uint8") * 255
+
+        valid = np.isfinite(vv) & (vv > 0)
+        vv_db = np.full(vv.shape, np.nan, dtype="float32")
+        vv_db[valid] = 10 * np.log10(vv[valid])
+        vv_display = normalize_band(vv_db)
+        grayscale = np.dstack([vv_display, vv_display, vv_display])
+        alpha = valid.astype("uint8") * 255
 
         output_png_path.parent.mkdir(parents=True, exist_ok=True)
-        Image.fromarray(np.dstack([rgb, alpha]), mode="RGBA").save(output_png_path)
+        Image.fromarray(np.dstack([grayscale, alpha]), mode="RGBA").save(output_png_path)
         bounds = raster_bounds_4326(src)
 
     return bounds, output_png_path

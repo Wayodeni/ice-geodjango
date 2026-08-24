@@ -52,9 +52,15 @@ function roiManager() {
           polygon: {
             allowIntersection: false,
             showArea: true,
+            shapeOptions: {
+              fill: false,
+            },
           },
           rectangle: {
             showArea: true,
+            shapeOptions: {
+              fill: false,
+            },
           },
         },
         edit: {
@@ -77,6 +83,10 @@ function roiManager() {
         if (this.selectedLayer) {
           this.setStatus("ROI geometry changed. Save ROI to persist changes.");
         }
+      });
+
+      this.map.on("zoomend resize", () => {
+        L.Util.requestAnimFrame(() => this.refreshPreviewLayers());
       });
     },
 
@@ -116,7 +126,7 @@ function roiManager() {
           layer.setStyle({
             color: "#2f6fed",
             weight: 2,
-            fillOpacity: 0.15,
+            fill: false,
           });
         }
       });
@@ -131,6 +141,14 @@ function roiManager() {
       this.visiblePreviewJobIds = [];
     },
 
+    refreshPreviewLayers() {
+      Object.values(this.previewLayers).forEach((preview) => {
+        if (this.map.hasLayer(preview.layer)) {
+          preview.layer.setBounds(preview.bounds);
+        }
+      });
+    },
+
     selectLayer(layer) {
       this.selectedLayer = layer;
       this.resetLayerStyles();
@@ -139,7 +157,7 @@ function roiManager() {
         this.selectedLayer.setStyle({
           color: "#e74c3c",
           weight: 3,
-          fillOpacity: 0.18,
+          fill: false,
         });
       }
 
@@ -156,7 +174,7 @@ function roiManager() {
         style: {
           color: "#2f6fed",
           weight: 2,
-          fillOpacity: 0.15,
+          fill: false,
         },
       });
 
@@ -326,17 +344,22 @@ function roiManager() {
 
       this.removePreview(job.id);
 
-      const previewLayer = L.imageOverlay(imageUrl, bounds, {
+      const previewBounds = L.latLngBounds(bounds);
+      const previewLayer = L.imageOverlay(imageUrl, previewBounds, {
         opacity: 0.75,
         interactive: true,
         alt: `${label} layer for job ${job.id}`,
       }).addTo(this.map);
 
-      this.previewLayers[job.id] = { layer: previewLayer, layerName };
+      this.previewLayers[job.id] = {
+        layer: previewLayer,
+        layerName,
+        bounds: previewBounds,
+      };
       this.visiblePreviewJobIds = [...this.visiblePreviewJobIds, job.id];
       previewLayer.bringToFront();
       this.drawnItems.bringToFront();
-      this.map.fitBounds(bounds, {
+      this.map.fitBounds(previewBounds, {
         padding: [20, 20],
       });
       this.setStatus(`Showing ${label} layer for job #${job.id}.`);
