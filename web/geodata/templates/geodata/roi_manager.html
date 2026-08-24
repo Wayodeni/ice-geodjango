@@ -142,16 +142,28 @@
                                     <div class="job-actions">
                                         <button type="button" @click="runJob(job.id)">Run / rerun</button>
 
-                                        <template x-if="job.preview_image">
+                                        <template x-if="job.rgb_preview_image">
                                             <button type="button"
-                                                    :class="{ secondary: isPreviewVisible(job.id) }"
-                                                    @click="togglePreview(job)">
-                                                <span x-text="isPreviewVisible(job.id) ? 'Hide preview' : 'Show preview'"></span>
+                                                    :class="{ secondary: isLayerPreviewVisible(job.id, 'rgb') }"
+                                                    @click="toggleLayerPreview(job, 'rgb')">
+                                                <span x-text="isLayerPreviewVisible(job.id, 'rgb') ? 'Hide RGB' : 'RGB layer'"></span>
                                             </button>
                                         </template>
 
-                                        <template x-if="job.output_cog">
-                                            <a :href="job.output_cog" target="_blank">COG</a>
+                                        <template x-if="job.sar_preview_image">
+                                            <button type="button"
+                                                    :class="{ secondary: isLayerPreviewVisible(job.id, 'sar') }"
+                                                    @click="toggleLayerPreview(job, 'sar')">
+                                                <span x-text="isLayerPreviewVisible(job.id, 'sar') ? 'Hide SAR' : 'SAR layer'"></span>
+                                            </button>
+                                        </template>
+
+                                        <template x-if="job.rgb_cog">
+                                            <a :href="job.rgb_cog" target="_blank">RGB COG</a>
+                                        </template>
+
+                                        <template x-if="job.sar_cog">
+                                            <a :href="job.sar_cog" target="_blank">SAR COG</a>
                                         </template>
                                     </div>
                                 </div>

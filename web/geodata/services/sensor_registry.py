@@ -18,7 +18,7 @@ SENSOR_REGISTRY = {
         # Planetary Computer Sentinel-2 L2A usually exposes ESA-style asset keys.
         # The processing pipeline normalizes possible common names such as red/green/blue
         # to these internal names after loading.
-        bands=["B02", "B03", "B04", "SCL"],
+        bands=["B02", "B03", "B04"],
         is_optical=True,
         cloud_property="eo:cloud_cover",
         allowed_resolutions=(10, 20, 60),

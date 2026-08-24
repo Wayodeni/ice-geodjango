@@ -123,8 +123,8 @@ function roiManager() {
     },
 
     clearPreviews() {
-      Object.values(this.previewLayers).forEach((layer) => {
-        this.map.removeLayer(layer);
+      Object.values(this.previewLayers).forEach((preview) => {
+        this.map.removeLayer(preview.layer);
       });
 
       this.previewLayers = {};
@@ -292,54 +292,64 @@ function roiManager() {
     },
 
     isPreviewVisible(jobId) {
-      return this.visiblePreviewJobIds.includes(jobId);
+      return Boolean(this.previewLayers[jobId]);
+    },
+
+    isLayerPreviewVisible(jobId, layerName) {
+      return this.previewLayers[jobId]?.layerName === layerName;
     },
 
     removePreview(jobId) {
-      const layer = this.previewLayers[jobId];
+      const preview = this.previewLayers[jobId];
 
-      if (layer) {
-        this.map.removeLayer(layer);
+      if (preview) {
+        this.map.removeLayer(preview.layer);
       }
 
       delete this.previewLayers[jobId];
       this.visiblePreviewJobIds = this.visiblePreviewJobIds.filter((id) => id !== jobId);
     },
 
-    showPreview(job) {
-      if (!job.preview_image || !job.preview_bounds) {
-        this.setStatus(`Job #${job.id} has no map preview yet.`);
+    showLayerPreview(job, layerName) {
+      const imageUrl = job[`${layerName}_preview_image`];
+      const bounds = job[`${layerName}_preview_bounds`];
+      const label = layerName.toUpperCase();
+
+      if (!imageUrl || !bounds) {
+        this.setStatus(`Job #${job.id} has no ${label} layer yet.`);
         return;
       }
 
-      if (this.isPreviewVisible(job.id)) {
+      if (this.isLayerPreviewVisible(job.id, layerName)) {
         return;
       }
 
-      const previewLayer = L.imageOverlay(job.preview_image, job.preview_bounds, {
+      this.removePreview(job.id);
+
+      const previewLayer = L.imageOverlay(imageUrl, bounds, {
         opacity: 0.75,
         interactive: true,
-        alt: `Mosaic preview for job ${job.id}`,
+        alt: `${label} layer for job ${job.id}`,
       }).addTo(this.map);
 
-      this.previewLayers[job.id] = previewLayer;
+      this.previewLayers[job.id] = { layer: previewLayer, layerName };
       this.visiblePreviewJobIds = [...this.visiblePreviewJobIds, job.id];
       previewLayer.bringToFront();
       this.drawnItems.bringToFront();
-      this.map.fitBounds(job.preview_bounds, {
+      this.map.fitBounds(bounds, {
         padding: [20, 20],
       });
-      this.setStatus(`Showing preview for job #${job.id}.`);
+      this.setStatus(`Showing ${label} layer for job #${job.id}.`);
     },
 
-    togglePreview(job) {
-      if (this.isPreviewVisible(job.id)) {
+    toggleLayerPreview(job, layerName) {
+      if (this.isLayerPreviewVisible(job.id, layerName)) {
         this.removePreview(job.id);
-        this.setStatus(`Hidden preview for job #${job.id}.`);
+        this.setStatus(`Hidden ${layerName.toUpperCase()} layer for job #${job.id}.`);
         return;
       }
 
-      this.showPreview(job);
+      this.showLayerPreview(job, layerName);
     },
 
     selectedSensors() {

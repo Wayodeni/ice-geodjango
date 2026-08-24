@@ -35,6 +35,10 @@ class SatelliteSceneSerializer(GeoFeatureModelSerializer):
 
 class MosaicJobSerializer(serializers.ModelSerializer):
     output_cog_url = serializers.SerializerMethodField()
+    rgb_cog_url = serializers.SerializerMethodField()
+    sar_cog_url = serializers.SerializerMethodField()
+    rgb_preview_url = serializers.SerializerMethodField()
+    sar_preview_url = serializers.SerializerMethodField()
 
     class Meta:
         model = MosaicJob
@@ -51,6 +55,16 @@ class MosaicJobSerializer(serializers.ModelSerializer):
             "error_message",
             "output_cog",
             "output_cog_url",
+            "rgb_cog",
+            "rgb_cog_url",
+            "sar_cog",
+            "sar_cog_url",
+            "rgb_preview",
+            "rgb_preview_url",
+            "sar_preview",
+            "sar_preview_url",
+            "rgb_bounds",
+            "sar_bounds",
             "output_metadata",
             "created_at",
             "started_at",
@@ -61,6 +75,12 @@ class MosaicJobSerializer(serializers.ModelSerializer):
             "status",
             "error_message",
             "output_cog",
+            "rgb_cog",
+            "sar_cog",
+            "rgb_preview",
+            "sar_preview",
+            "rgb_bounds",
+            "sar_bounds",
             "output_metadata",
             "created_at",
             "started_at",
@@ -68,12 +88,27 @@ class MosaicJobSerializer(serializers.ModelSerializer):
         ]
 
     def get_output_cog_url(self, obj):
+        return self.get_file_url(obj.output_cog)
+
+    def get_file_url(self, field):
         request = self.context.get("request")
-        if obj.output_cog and request:
-            return request.build_absolute_uri(obj.output_cog.url)
-        if obj.output_cog:
-            return obj.output_cog.url
+        if field and request:
+            return request.build_absolute_uri(field.url)
+        if field:
+            return field.url
         return None
+
+    def get_rgb_cog_url(self, obj):
+        return self.get_file_url(obj.rgb_cog)
+
+    def get_sar_cog_url(self, obj):
+        return self.get_file_url(obj.sar_cog)
+
+    def get_rgb_preview_url(self, obj):
+        return self.get_file_url(obj.rgb_preview)
+
+    def get_sar_preview_url(self, obj):
+        return self.get_file_url(obj.sar_preview)
 
     def validate(self, attrs):
         instance = self.instance

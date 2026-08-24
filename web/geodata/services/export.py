@@ -8,7 +8,7 @@ from rio_cogeo.profiles import cog_profiles
 from geodata.services.bands import available_bands
 
 
-def save_feature_stack_as_cog(data_array, output_name: str) -> Path:
+def save_data_array_as_cog(data_array, output_name: str) -> Path:
     output_dir = settings.MEDIA_ROOT / "processing"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -26,8 +26,9 @@ def save_feature_stack_as_cog(data_array, output_name: str) -> Path:
     if data_array.rio.crs is None:
         raise ValueError("DataArray has no CRS. Check stackstac EPSG/CRS settings before export.")
 
+    # float32 is sufficient for satellite reflectance/backscatter and halves peak RAM use.
     # Compute explicitly to make remote raster reading failures visible before COG conversion.
-    data_array = data_array.compute()
+    data_array = data_array.astype("float32").compute()
     data_array.rio.to_raster(tmp_path)
 
     profile = cog_profiles.get("deflate")
@@ -41,3 +42,8 @@ def save_feature_stack_as_cog(data_array, output_name: str) -> Path:
 
     tmp_path.unlink(missing_ok=True)
     return cog_path
+
+
+def save_feature_stack_as_cog(data_array, output_name: str) -> Path:
+    """Backward-compatible alias for older callers."""
+    return save_data_array_as_cog(data_array, output_name)

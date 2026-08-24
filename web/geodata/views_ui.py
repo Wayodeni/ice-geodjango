@@ -46,6 +46,15 @@ def get_preview_image_url(job: MosaicJob):
     return None
 
 
+def file_url(field):
+    return field.url if field else None
+
+
+def layer_bounds(job, layer_name):
+    bounds = getattr(job, f"{layer_name}_bounds")
+    return bounds_to_leaflet(bounds.extent) if bounds else None
+
+
 def job_to_dict(job: MosaicJob) -> dict:
     preview_bounds = None
     if job.output_bounds:
@@ -68,6 +77,12 @@ def job_to_dict(job: MosaicJob) -> dict:
         "output_cog": job.output_cog.url if job.output_cog else None,
         "preview_image": get_preview_image_url(job),
         "preview_bounds": preview_bounds,
+        "rgb_cog": file_url(job.rgb_cog),
+        "sar_cog": file_url(job.sar_cog),
+        "rgb_preview_image": file_url(job.rgb_preview),
+        "sar_preview_image": file_url(job.sar_preview),
+        "rgb_preview_bounds": layer_bounds(job, "rgb"),
+        "sar_preview_bounds": layer_bounds(job, "sar"),
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
