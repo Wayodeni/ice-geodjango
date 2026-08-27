@@ -7,7 +7,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_http_methods
 
-from geodata.models import MosaicJob, RegionOfInterest
+from geodata.models import MosaicJob, RegionOfInterest, SatelliteScene
 from geodata.services.dates import coerce_date
 from geodata.services.job_validation import normalize_and_validate_job_settings
 from geodata.tasks import run_mosaic_job
@@ -55,7 +55,28 @@ def layer_bounds(job, layer_name):
     return bounds_to_leaflet(bounds.extent) if bounds else None
 
 
-def job_to_dict(job: MosaicJob) -> dict:
+def sar_scene_date(job: MosaicJob, scene_dates=None):
+    acquired_at = job.output_metadata.get("sar_scene_acquired_at")
+    if acquired_at:
+        return acquired_at[:10]
+
+    scene_id = job.output_metadata.get("sar_scene_id")
+    if not scene_id:
+        return None
+
+    if scene_dates is not None:
+        value = scene_dates.get(scene_id)
+    else:
+        value = (
+            SatelliteScene.objects
+            .filter(stac_id=scene_id)
+            .values_list("acquired_at", flat=True)
+            .first()
+        )
+    return value.date().isoformat() if value else None
+
+
+def job_to_dict(job: MosaicJob, scene_dates=None) -> dict:
     preview_bounds = None
     if job.output_bounds:
         preview_bounds = bounds_to_leaflet(job.output_bounds.extent)
@@ -83,6 +104,7 @@ def job_to_dict(job: MosaicJob) -> dict:
         "sar_preview_image": file_url(job.sar_preview),
         "rgb_preview_bounds": layer_bounds(job, "rgb"),
         "sar_preview_bounds": layer_bounds(job, "sar"),
+        "sar_scene_date": sar_scene_date(job, scene_dates),
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
@@ -141,15 +163,27 @@ def roi_detail_api(request, roi_id: int):
 @require_http_methods(["GET", "POST"])
 def job_collection_api(request):
     if request.method == "GET":
-        jobs = (
+        jobs = list(
             MosaicJob.objects
             .select_related("roi")
             .all()
             .order_by("-created_at")[:50]
         )
 
+        sar_scene_ids = {
+            job.output_metadata.get("sar_scene_id")
+            for job in jobs
+            if job.output_metadata.get("sar_scene_id")
+            and not job.output_metadata.get("sar_scene_acquired_at")
+        }
+        scene_dates = dict(
+            SatelliteScene.objects
+            .filter(stac_id__in=sar_scene_ids)
+            .values_list("stac_id", "acquired_at")
+        )
+
         return JsonResponse({
-            "results": [job_to_dict(job) for job in jobs],
+            "results": [job_to_dict(job, scene_dates) for job in jobs],
         })
 
     payload = json.loads(request.body.decode("utf-8"))

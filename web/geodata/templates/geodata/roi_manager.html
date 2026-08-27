@@ -129,6 +129,9 @@
                                         Date: <span x-text="job.target_date"></span>,
                                         window: ±<span x-text="job.time_window_days"></span> days<br>
                                         Sensors: <span x-text="formatSensors(job.selected_sensors)"></span><br>
+                                        <template x-if="job.sar_scene_date">
+                                            <span>SAR scene date: <span x-text="job.sar_scene_date"></span><br></span>
+                                        </template>
                                         CRS: <span x-text="job.target_crs"></span>,
                                         resolution: <span x-text="job.resolution"></span> m
                                     </div>

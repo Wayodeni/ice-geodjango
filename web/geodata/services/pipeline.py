@@ -18,6 +18,7 @@ class RasterLayerBuildResult:
     preview_png_path: Path
     bounds_4326: tuple[float, float, float, float]
     scene_ids: list[str]
+    acquired_at: datetime | None = None
 
 
 @dataclass
@@ -42,7 +43,13 @@ def closest_item(items, target_date):
     return min(items, key=lambda item: abs(item_datetime(item) - target_datetime))
 
 
-def export_layer(data_array, job, layer_type: str, scene_ids: list[str]):
+def export_layer(
+    data_array,
+    job,
+    layer_type: str,
+    scene_ids: list[str],
+    acquired_at: datetime | None = None,
+):
     print(f"Exporting {layer_type.upper()} layer bands: {available_bands(data_array)}")
     artifact_type = "scene" if layer_type == "sar" else "mosaic"
     cog_path = save_data_array_as_cog(
@@ -59,6 +66,7 @@ def export_layer(data_array, job, layer_type: str, scene_ids: list[str]):
         preview_png_path=preview_png_path,
         bounds_4326=bounds_4326,
         scene_ids=scene_ids,
+        acquired_at=acquired_at,
     )
 
 
@@ -77,7 +85,13 @@ def build_sar_layer(job, items, target_date):
     # Classification input must remain one acquisition, not a temporal mosaic.
     stack = load_stack(items=[item], job=job, sensor=sensor)
     sar_scene = stack.sel(band=["vv", "vh"]).isel(time=0, drop=True)
-    return export_layer(sar_scene, job, "sar", [item.id])
+    return export_layer(
+        sar_scene,
+        job,
+        "sar",
+        [item.id],
+        acquired_at=item_datetime(item),
+    )
 
 
 def build_mosaic_for_job(job) -> MosaicBuildResult:
@@ -117,5 +131,10 @@ def build_mosaic_for_job(job) -> MosaicBuildResult:
             "scenes_count": scenes_count,
             "rgb_scene_ids": rgb_result.scene_ids if rgb_result else [],
             "sar_scene_id": sar_result.scene_ids[0] if sar_result else None,
+            "sar_scene_acquired_at": (
+                sar_result.acquired_at.isoformat()
+                if sar_result and sar_result.acquired_at
+                else None
+            ),
         },
     )

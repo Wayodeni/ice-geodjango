@@ -39,6 +39,7 @@ class MosaicJobSerializer(serializers.ModelSerializer):
     sar_cog_url = serializers.SerializerMethodField()
     rgb_preview_url = serializers.SerializerMethodField()
     sar_preview_url = serializers.SerializerMethodField()
+    sar_scene_date = serializers.SerializerMethodField()
 
     class Meta:
         model = MosaicJob
@@ -65,6 +66,7 @@ class MosaicJobSerializer(serializers.ModelSerializer):
             "sar_preview_url",
             "rgb_bounds",
             "sar_bounds",
+            "sar_scene_date",
             "output_metadata",
             "created_at",
             "started_at",
@@ -109,6 +111,22 @@ class MosaicJobSerializer(serializers.ModelSerializer):
 
     def get_sar_preview_url(self, obj):
         return self.get_file_url(obj.sar_preview)
+
+    def get_sar_scene_date(self, obj):
+        acquired_at = obj.output_metadata.get("sar_scene_acquired_at")
+        if acquired_at:
+            return acquired_at[:10]
+
+        scene_id = obj.output_metadata.get("sar_scene_id")
+        scene = (
+            SatelliteScene.objects
+            .filter(stac_id=scene_id)
+            .only("acquired_at")
+            .first()
+            if scene_id
+            else None
+        )
+        return scene.acquired_at.date().isoformat() if scene else None
 
     def validate(self, attrs):
         instance = self.instance
